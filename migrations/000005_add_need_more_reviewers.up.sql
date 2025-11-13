@@ -1,0 +1,2 @@
+ALTER TABLE pull_requests
+    ADD COLUMN IF NOT EXISTS need_more_reviewers BOOLEAN NOT NULL DEFAULT FALSE;
