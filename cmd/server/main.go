@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"pr-reviewer-service/internal/handlers"
-	"pr-reviewer-service/internal/middleware"
+
 	"pr-reviewer-service/internal/repository"
 	"pr-reviewer-service/internal/service"
 	"time"
