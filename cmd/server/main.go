@@ -132,16 +132,16 @@ func setupRouter(h *handlers.Handlers) *gin.Engine {
 
 	// Teams
 	router.POST("/team/add", h.CreateTeam)
-	router.GET("/team/get", middleware.AuthMiddleware(), h.GetTeam)
+	router.GET("/team/get", h.GetTeam)
 
 	// Users
-	router.POST("/users/setIsActive", middleware.AdminOnlyMiddleware(), h.SetUserActive)
-	router.GET("/users/getReview", middleware.AuthMiddleware(), h.GetReview)
+	router.POST("/users/setIsActive", h.SetUserActive)
+	router.GET("/users/getReview", h.GetReview)
 
 	// Pull Requests
-	router.POST("/pullRequest/create", middleware.AdminOnlyMiddleware(), h.CreatePullRequest)
-	router.POST("/pullRequest/merge", middleware.AdminOnlyMiddleware(), h.MergePullRequest)
-	router.POST("/pullRequest/reassign", middleware.AdminOnlyMiddleware(), h.ReassignReviewer)
+	router.POST("/pullRequest/create", h.CreatePullRequest)
+	router.POST("/pullRequest/merge", h.MergePullRequest)
+	router.POST("/pullRequest/reassign", h.ReassignReviewer)
 
 	return router
 }
