@@ -34,3 +34,6 @@ go.work
 # Docker
 docker-compose.override.yml
 
+# Docker volumes (если создаются локально)
+postgres_data/
+

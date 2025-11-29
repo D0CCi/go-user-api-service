@@ -1,0 +1,106 @@
+# Конфигурация golangci-lint для проекта PR Reviewer Service
+
+run:
+  # Включаем все доступные линтеры
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - vendor
+    - migrations
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*\\.gen\\.go$"
+
+linters:
+  # Отключаем некоторые линтеры, которые могут быть слишком строгими
+  disable-all: true
+  enable:
+    # Основные линтеры
+    - errcheck          # Проверка обработки ошибок
+    - gosimple          # Упрощение кода
+    - govet             # Статический анализ кода
+    - ineffassign       # Обнаружение неиспользуемых присваиваний
+    - staticcheck       # Статический анализ
+    - unused            # Обнаружение неиспользуемого кода
+    - varcheck          # Проверка неиспользуемых переменных
+    - deadcode          # Обнаружение мертвого кода
+    - structcheck       # Проверка неиспользуемых полей структур
+    - typecheck         # Проверка типов
+    - gofmt             # Форматирование кода
+    - goimports         # Проверка импортов
+    - misspell          # Проверка орфографии
+    - goconst           # Обнаружение магических чисел и строк
+    - gocyclo           # Проверка цикломатической сложности
+    - dupl              # Обнаружение дублирующегося кода
+    - gocritic          # Критический анализ кода
+    - gosec             # Безопасность кода
+    - lll               # Проверка длины строк
+    - maligned          # Проверка выравнивания структур
+    - prealloc          # Предварительное выделение памяти
+    - unconvert         # Обнаружение ненужных преобразований типов
+    - unparam           # Обнаружение неиспользуемых параметров
+    - whitespace        # Проверка пробелов
+
+linters-settings:
+  errcheck:
+    # Игнорируем некоторые функции, которые могут не требовать проверки ошибок
+    ignore: fmt:.*
+  
+  gocyclo:
+    # Максимальная цикломатическая сложность
+    min-complexity: 15
+  
+  dupl:
+    # Порог для обнаружения дубликатов
+    threshold: 100
+  
+  lll:
+    # Максимальная длина строки
+    line-length: 120
+  
+  goconst:
+    # Минимальная длина строки для проверки
+    min-len: 3
+    # Минимальное количество повторений
+    min-occurrences: 2
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # Разрешаем дублирующиеся импорты в некоторых случаях
+  
+  gosec:
+    # Уровень безопасности
+    severity: medium
+    # Конфиденциальность
+    confidence: medium
+
+issues:
+  # Максимальное количество проблем на одном файле
+  max-issues-per-linter: 50
+  max-same-issues: 0
+  
+  # Исключаем некоторые проблемы
+  exclude-rules:
+    # Игнорируем ошибки в тестовых файлах для некоторых линтеров
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    
+    # Игнорируем длинные строки в миграциях
+    - path: migrations/.*
+      linters:
+        - lll
+    
+    # Игнорируем некоторые предупреждения о безопасности в тестах
+    - path: _test\.go
+      text: "G104"
+      linters:
+        - gosec
+

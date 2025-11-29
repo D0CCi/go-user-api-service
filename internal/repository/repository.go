@@ -6,8 +6,7 @@ import (
 	"pr-reviewer-service/internal/models"
 )
 
-// Repository - это слой для всей работы с базой данных.
-// Все SQL-запросы живут здесь.
+// Repository - тут вся работа с базой данных
 type Repository struct {
 	db *sql.DB
 }
@@ -54,7 +53,7 @@ func (r *Repository) GetTeam(teamName string) (*models.Team, error) {
 	}
 
 	if len(team.Members) == 0 {
-		// Проверяем, существует ли команда, даже если в ней нет участников.
+		// Проверяю, существует ли команда, даже если в ней нет участников
 		exists, err := r.TeamExists(teamName)
 		if err != nil {
 			return nil, err
@@ -259,7 +258,7 @@ func (r *Repository) MergePullRequest(pullRequestID string) error {
 		return err
 	}
 	if rowsAffected == 0 {
-		// Проверяем, существует ли PR
+		// Проверяю, существует ли PR
 		exists, err := r.PullRequestExists(pullRequestID)
 		if err != nil {
 			return err
@@ -267,7 +266,7 @@ func (r *Repository) MergePullRequest(pullRequestID string) error {
 		if !exists {
 			return fmt.Errorf("pull request not found")
 		}
-		// Если существует, но уже MERGED - это нормально (идемпотентность)
+		// Если существует, но уже MERGED - это нормально, идемпотентность работает
 	}
 	return nil
 }
@@ -279,7 +278,7 @@ func (r *Repository) ReassignReviewer(pullRequestID string, oldReviewerID string
 	}
 	defer tx.Rollback()
 
-	// Проверяем, что старый ревьювер назначен
+	// Проверяю, что старый ревьювер действительно назначен на этот PR
 	var exists bool
 	err = tx.QueryRow(`
 		SELECT EXISTS(
@@ -294,7 +293,7 @@ func (r *Repository) ReassignReviewer(pullRequestID string, oldReviewerID string
 		return fmt.Errorf("reviewer is not assigned to this PR")
 	}
 
-	// Удаляем старого ревьювера
+	// Удаляю старого ревьювера
 	_, err = tx.Exec(`
 		DELETE FROM pull_request_reviewers 
 		WHERE pull_request_id = $1 AND reviewer_id = $2
@@ -303,7 +302,7 @@ func (r *Repository) ReassignReviewer(pullRequestID string, oldReviewerID string
 		return err
 	}
 
-	// Добавляем нового ревьювера
+	// Добавляю нового ревьювера
 	_, err = tx.Exec(`
 		INSERT INTO pull_request_reviewers (pull_request_id, reviewer_id)
 		VALUES ($1, $2)
@@ -337,4 +336,137 @@ func (r *Repository) GetPullRequestsByReviewer(reviewerID string) ([]*models.Pul
 		prs = append(prs, pr)
 	}
 	return prs, nil
+}
+
+// Statistics - статистика по пользователям
+func (r *Repository) GetUserReviewStats() ([]*models.UserReviewStats, error) {
+	rows, err := r.db.Query(`
+		SELECT 
+			u.user_id,
+			u.username,
+			COUNT(prr.reviewer_id) as total_assignments,
+			COUNT(CASE WHEN pr.status = 'OPEN' THEN 1 END) as open_assignments,
+			COUNT(CASE WHEN pr.status = 'MERGED' THEN 1 END) as merged_assignments
+		FROM users u
+		LEFT JOIN pull_request_reviewers prr ON u.user_id = prr.reviewer_id
+		LEFT JOIN pull_requests pr ON prr.pull_request_id = pr.pull_request_id
+		GROUP BY u.user_id, u.username
+		ORDER BY total_assignments DESC, u.user_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []*models.UserReviewStats
+	for rows.Next() {
+		stat := &models.UserReviewStats{}
+		if err := rows.Scan(&stat.UserID, &stat.Username, &stat.TotalAssignments, &stat.OpenAssignments, &stat.MergedAssignments); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, nil
+}
+
+func (r *Repository) GetPRStats() (*models.PRStats, error) {
+	stats := &models.PRStats{}
+	err := r.db.QueryRow(`
+		SELECT 
+			COUNT(*) as total_prs,
+			COUNT(CASE WHEN status = 'OPEN' THEN 1 END) as open_prs,
+			COUNT(CASE WHEN status = 'MERGED' THEN 1 END) as merged_prs,
+			(SELECT COUNT(*) FROM pull_request_reviewers) as total_assignments
+		FROM pull_requests
+	`).Scan(&stats.TotalPRs, &stats.OpenPRs, &stats.MergedPRs, &stats.TotalAssignments)
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+// Bulk deactivation - получаю список пользователей без деактивации
+func (r *Repository) GetUsersByTeamForDeactivation(teamName string) ([]string, error) {
+	rows, err := r.db.Query(`
+		SELECT user_id FROM users WHERE team_name = $1 AND is_active = true
+	`, teamName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var userIDs []string
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, userID)
+	}
+
+	return userIDs, nil
+}
+
+func (r *Repository) BulkDeactivateUsersByTeam(teamName string) ([]string, error) {
+	// Получаю список пользователей перед деактивацией
+	userIDs, err := r.GetUsersByTeamForDeactivation(teamName)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(userIDs) == 0 {
+		return []string{}, nil
+	}
+
+	// Деактивирую всех активных пользователей команды
+	_, err = r.db.Exec(`
+		UPDATE users 
+		SET is_active = false, updated_at = CURRENT_TIMESTAMP 
+		WHERE team_name = $1 AND is_active = true
+	`, teamName)
+	if err != nil {
+		return nil, err
+	}
+
+	return userIDs, nil
+}
+
+func (r *Repository) GetOpenPRsWithReviewers(reviewerIDs []string) ([]string, error) {
+	if len(reviewerIDs) == 0 {
+		return []string{}, nil
+	}
+
+	placeholders := ""
+	args := make([]interface{}, len(reviewerIDs)+1)
+	args[0] = "OPEN"
+	for i, id := range reviewerIDs {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += fmt.Sprintf("$%d", i+2)
+		args[i+1] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT DISTINCT pr.pull_request_id
+		FROM pull_requests pr
+		INNER JOIN pull_request_reviewers prr ON pr.pull_request_id = prr.pull_request_id
+		WHERE pr.status = $1 AND prr.reviewer_id IN (%s)
+	`, placeholders)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var prIDs []string
+	for rows.Next() {
+		var prID string
+		if err := rows.Scan(&prID); err != nil {
+			return nil, err
+		}
+		prIDs = append(prIDs, prID)
+	}
+	return prIDs, nil
 }

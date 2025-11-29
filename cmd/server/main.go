@@ -18,31 +18,28 @@ import (
 )
 
 func main() {
-	// Первым делом я запускаю миграции.
-	// Это нужно, чтобы убедиться, что структура БД правильная перед тем, как сервис начнет работать.
+	// Сначала запускаю миграции, чтобы структура БД была правильной
 	if err := runMigrations(); err != nil {
 		log.Fatalf("Не получилось выполнить миграции: %v", err)
 	}
 
-	// Теперь можно подключаться к базе данных
+	// Подключаюсь к базе данных
 	db, err := connectDB()
 	if err != nil {
 		log.Fatalf("Не получилось подключиться к базе: %v", err)
 	}
 	defer db.Close()
 
-	// Тут я "собираю" все части сервиса вместе.
-	// Repository - это для общения с базой данных.
-	// Service - тут вся основная логика.
-	// Handlers - это для обработки HTTP-запросов.
+	// Собираю все части сервиса вместе
+	// Repository - работа с БД, Service - основная логика, Handlers - HTTP-запросы
 	repo := repository.NewRepository(db)
 	svc := service.NewService(repo)
 	h := handlers.NewHandlers(svc)
 
-	// Настраиваю все эндпоинты (ручки API)
+	// Настраиваю все эндпоинты
 	router := setupRouter(h)
 
-	// Запускаю сервер. По умолчанию на порту 8080.
+	// Запускаю сервер на порту 8080 (или из переменной окружения)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -88,7 +85,7 @@ func runMigrations() error {
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		user, password, host, port, dbname, sslmode)
 
-	// Ждём готовности БД
+	// Жду, пока база данных станет доступной
 	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
 		db, err := sql.Open("postgres", dsn)
@@ -100,7 +97,7 @@ func runMigrations() error {
 			db.Close()
 		}
 		if i < maxRetries-1 {
-			log.Printf("Waiting for database... (attempt %d/%d)", i+1, maxRetries)
+			log.Printf("Жду пока база данных станет доступна... (попытка %d/%d)", i+1, maxRetries)
 			time.Sleep(2 * time.Second)
 		} else {
 			return fmt.Errorf("database is not available after %d attempts", maxRetries)
@@ -126,21 +123,20 @@ func runMigrations() error {
 func setupRouter(h *handlers.Handlers) *gin.Engine {
 	router := gin.Default()
 
-	// Health check (без аутентификации)
 	router.GET("/health", h.HealthCheck)
 
-	// Teams
 	router.POST("/team/add", h.CreateTeam)
 	router.GET("/team/get", h.GetTeam)
+	router.POST("/team/bulkDeactivate", h.BulkDeactivateTeam)
 
-	// Users
 	router.POST("/users/setIsActive", h.SetUserActive)
 	router.GET("/users/getReview", h.GetReview)
 
-	// Pull Requests
 	router.POST("/pullRequest/create", h.CreatePullRequest)
 	router.POST("/pullRequest/merge", h.MergePullRequest)
 	router.POST("/pullRequest/reassign", h.ReassignReviewer)
+
+	router.GET("/statistics", h.GetStatistics)
 
 	return router
 }

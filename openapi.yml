@@ -8,6 +8,7 @@ tags:
   - name: Users
   - name: PullRequests
   - name: Health
+  - name: Statistics
 
 components:
   parameters:
@@ -178,9 +179,6 @@ paths:
     get:
       tags: [Teams]
       summary: Получить команду с участниками
-      security:
-        - AdminToken: []
-        - UserToken: []
       parameters:
         - $ref: '#/components/parameters/TeamNameQuery'
       responses:
@@ -209,8 +207,6 @@ paths:
     post:
       tags: [Users]
       summary: Установить флаг активности пользователя
-      security:
-        - AdminToken: []
       requestBody:
         required: true
         content:
@@ -247,18 +243,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '401':
-          description: Нет/неверный админский токен
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /pullRequest/create:
     post:
       tags: [PullRequests]
       summary: Создать PR и автоматически назначить до 2 ревьюверов из команды автора
-      security:
-        - AdminToken: []
       requestBody:
         required: true
         content:
@@ -309,8 +298,6 @@ paths:
     post:
       tags: [PullRequests]
       summary: Пометить PR как MERGED (идемпотентная операция)
-      security:
-        - AdminToken: []
       requestBody:
         required: true
         content:
@@ -351,8 +338,6 @@ paths:
     post:
       tags: [PullRequests]
       summary: Переназначить конкретного ревьювера на другого из его команды
-      security:
-        - AdminToken: []
       requestBody:
         required: true
         content:
@@ -365,7 +350,7 @@ paths:
                 old_user_id: { type: string }
             example:
               pull_request_id: pr-1001
-              old_reviewer_id: u2
+              old_user_id: u2
       responses:
         '200':
           description: Переназначение выполнено
@@ -417,9 +402,6 @@ paths:
     get:
       tags: [Users]
       summary: Получить PR'ы, где пользователь назначен ревьювером
-      security:
-        - AdminToken: []
-        - UserToken: []
       parameters:
         - $ref: '#/components/parameters/UserIdQuery'
       responses:
@@ -444,3 +426,107 @@ paths:
                     pull_request_name: Add search
                     author_id: u1
                     status: OPEN
+
+  /team/bulkDeactivate:
+    post:
+      tags: [Teams]
+      summary: Массовая деактивация пользователей команды с безопасной переназначаемостью открытых PR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ team_name ]
+              properties:
+                team_name:
+                  type: string
+            example:
+              team_name: payments
+      responses:
+        '200':
+          description: Пользователи деактивированы, открытые PR переназначены
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ deactivated_user_ids, reassigned_prs, message ]
+                properties:
+                  deactivated_user_ids:
+                    type: array
+                    items:
+                      type: string
+                  reassigned_prs:
+                    type: array
+                    items:
+                      type: string
+                  message:
+                    type: string
+              example:
+                deactivated_user_ids: [u2, u3]
+                reassigned_prs: [pr-1001]
+                message: Deactivated 2 users, reassigned 1 PRs
+        '404':
+          description: Команда не найдена
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /statistics:
+    get:
+      tags: [Statistics]
+      summary: Получить статистику по назначениям ревьюверов и PR
+      responses:
+        '200':
+          description: Статистика
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ user_stats, pr_stats ]
+                properties:
+                  user_stats:
+                    type: array
+                    items:
+                      type: object
+                      required: [ user_id, username, total_assignments, open_assignments, merged_assignments ]
+                      properties:
+                        user_id:
+                          type: string
+                        username:
+                          type: string
+                        total_assignments:
+                          type: integer
+                        open_assignments:
+                          type: integer
+                        merged_assignments:
+                          type: integer
+                  pr_stats:
+                    type: object
+                    required: [ total_prs, open_prs, merged_prs, total_assignments ]
+                    properties:
+                      total_prs:
+                        type: integer
+                      open_prs:
+                        type: integer
+                      merged_prs:
+                        type: integer
+                      total_assignments:
+                        type: integer
+              example:
+                user_stats:
+                  - user_id: u1
+                    username: Alice
+                    total_assignments: 5
+                    open_assignments: 2
+                    merged_assignments: 3
+                  - user_id: u2
+                    username: Bob
+                    total_assignments: 3
+                    open_assignments: 1
+                    merged_assignments: 2
+                pr_stats:
+                  total_prs: 10
+                  open_prs: 4
+                  merged_prs: 6
+                  total_assignments: 18

@@ -7,8 +7,6 @@ services:
       POSTGRES_DB: pr_reviewer_db
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pr_reviewer -d pr_reviewer_db"]
       interval: 5s
@@ -32,8 +30,4 @@ services:
       postgres:
         condition: service_healthy
     restart: on-failure
-
-volumes:
-  postgres_data:
-
 

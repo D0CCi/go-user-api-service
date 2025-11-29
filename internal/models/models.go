@@ -62,3 +62,24 @@ type ErrorResponse struct {
 		Message string    `json:"message"`
 	} `json:"error"`
 }
+
+// Statistics models
+type UserReviewStats struct {
+	UserID           string `json:"user_id" db:"user_id"`
+	Username         string `json:"username" db:"username"`
+	TotalAssignments int    `json:"total_assignments" db:"total_assignments"`
+	OpenAssignments  int    `json:"open_assignments" db:"open_assignments"`
+	MergedAssignments int   `json:"merged_assignments" db:"merged_assignments"`
+}
+
+type PRStats struct {
+	TotalPRs        int `json:"total_prs" db:"total_prs"`
+	OpenPRs         int `json:"open_prs" db:"open_prs"`
+	MergedPRs       int `json:"merged_prs" db:"merged_prs"`
+	TotalAssignments int `json:"total_assignments" db:"total_assignments"`
+}
+
+type StatisticsResponse struct {
+	UserStats []UserReviewStats `json:"user_stats"`
+	PRStats   PRStats           `json:"pr_stats"`
+}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"pr-reviewer-service/internal/models"
 	"pr-reviewer-service/internal/service"
@@ -8,8 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handlers - это как бы "контроллеры" из мира MVC.
-// Они принимают HTTP-запросы, дергают нужные методы из сервиса и отдают ответ.
+// Handlers - обработчики HTTP-запросов
 type Handlers struct {
 	service *service.Service
 }
@@ -36,7 +36,7 @@ func (h *Handlers) CreateTeam(c *gin.Context) {
 	}
 
 	if err := h.service.CreateTeam(&team); err != nil {
-		// Если команда с таким именем уже есть, возвращаем специальную ошибку.
+		// Если команда с таким именем уже есть, возвращаю специальную ошибку
 		if err.Error() == "TEAM_EXISTS" {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{
 				Error: struct {
@@ -205,7 +205,7 @@ func (h *Handlers) CreatePullRequest(c *gin.Context) {
 
 	pr, err := h.service.CreatePullRequest(req.PullRequestID, req.PullRequestName, req.AuthorID)
 	if err != nil {
-		// Тут обрабатываю разные возможные ошибки от сервисного слоя
+		// Обрабатываю разные ошибки от сервиса
 		if err.Error() == "PR_EXISTS" {
 			c.JSON(http.StatusConflict, models.ErrorResponse{
 				Error: struct {
@@ -350,7 +350,7 @@ func (h *Handlers) ReassignReviewer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"pr":         pr,
+		"pr":          pr,
 		"replaced_by": newReviewerID,
 	})
 }
@@ -359,4 +359,73 @@ func (h *Handlers) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// Statistics - просто отдаю статистику
+func (h *Handlers) GetStatistics(c *gin.Context) {
+	stats, err := h.service.GetStatistics()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: struct {
+				Code    models.ErrorCode `json:"code"`
+				Message string           `json:"message"`
+			}{
+				Code:    models.ErrorNotFound,
+				Message: err.Error(),
+			},
+		})
+		return
+	}
 
+	c.JSON(http.StatusOK, stats)
+}
+
+// BulkDeactivateTeam - массовая деактивация команды с переназначением PR
+func (h *Handlers) BulkDeactivateTeam(c *gin.Context) {
+	var req struct {
+		TeamName string `json:"team_name" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error: struct {
+				Code    models.ErrorCode `json:"code"`
+				Message string           `json:"message"`
+			}{
+				Code:    models.ErrorNotFound,
+				Message: err.Error(),
+			},
+		})
+		return
+	}
+
+	deactivatedUserIDs, reassignedPRs, err := h.service.BulkDeactivateTeam(req.TeamName)
+	if err != nil {
+		if err.Error() == "team not found" {
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error: struct {
+					Code    models.ErrorCode `json:"code"`
+					Message string           `json:"message"`
+				}{
+					Code:    models.ErrorNotFound,
+					Message: "team not found",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: struct {
+				Code    models.ErrorCode `json:"code"`
+				Message string           `json:"message"`
+			}{
+				Code:    models.ErrorNotFound,
+				Message: err.Error(),
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deactivated_user_ids": deactivatedUserIDs,
+		"reassigned_prs":       reassignedPRs,
+		"message":              fmt.Sprintf("Deactivated %d users, reassigned %d PRs", len(deactivatedUserIDs), len(reassignedPRs)),
+	})
+}
